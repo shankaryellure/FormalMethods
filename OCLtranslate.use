@@ -1,0 +1,326 @@
+
+model TCAS
+
+-- Represents a pilot reacting to traffic or resolution advisories.
+class Pilot
+attributes
+    pilotID: String
+operations
+    reactToTrafficAdvisory () : Boolean
+    reactToResolutionAdvisory () : Boolean
+    disableAutopilot () : Boolean
+end
+
+-- Represents an aircraft with altitude, distance, and autopilot.
+class Aircraft
+attributes
+    registration: String
+    modelID: String
+    currentAltitude: Integer
+    currentDistance: Integer
+    currentBearing: Integer
+    autoPilot: Boolean
+operations
+    queryTransponder (): Boolean
+    getCurrentAltitude (): Integer
+    getCurrentBearing (): Integer
+    getCurrentDistance (): Integer
+    autoPilot (): Boolean
+end
+
+-- Represents a TCAS system tracking intruder aircraft.
+class TCAS
+attributes
+    Max_range: Integer
+operations
+    queryIntruder () : Boolean
+    issueTrafficAdvisory () : Boolean
+end
+
+-- Represents a transponder transmitting aircraft data.
+class Transponder
+attributes
+    identificationCode: String
+    altitude: Integer
+    bearing: Integer
+    distance: Integer
+operations
+    transponder (): Boolean
+    transmitData (): Boolean
+end
+
+-- Specialized advisory for intruder aircraft proximity alerts.
+class TrafficAdvisory < Advisory
+attributes
+    intruderAircraft: IntruderAircraft
+operations
+    trafficAdvisory () : Boolean
+    displayAdvisory () : Boolean
+end
+
+-- Represents an intruder aircraft with positional attributes.
+class IntruderAircraft
+attributes
+    intruderType: String
+    distanceFromOwnAircraft: Integer
+    bearing: Integer
+    altitude: Integer
+operations
+    getIntruderType (): String
+    getDistanceFromOwnAircraft (): Integer
+    getBearingFromOwnAircraft (): Integer
+    getAltitude (): Integer
+end
+
+-- General advisory providing type and time-to-intruder details.
+class Advisory
+attributes
+    advisoryType: String
+    timeToIntruder: Integer
+operations
+    advisory () : Boolean
+    displayAdvisory () : Boolean
+    getAdvisoryType () : String
+    getIntruderAircraft () : Aircraft
+    getTimeToIntruder () : Integer
+end
+
+-- Specialized advisory with resolution instructions for conflicts.
+class ResolutionAdvisory < Advisory
+attributes
+    resolutionType: String
+    altitudeChange: Integer
+operations
+    resolutionAdvisory () : Boolean
+    displayResolution () : Boolean
+end
+
+-- Represents a display showing advisory or resolution content.
+class Display
+attributes
+    displayID: String
+    displayType: String
+    displayContent: String
+operations
+    display () : Boolean
+    setDisplay () : Boolean
+    getDisplay () : Boolean
+    clearDisplay () : Boolean
+end
+
+
+-- Links a pilot to their assigned aircraft.
+association PilotAircraft between
+    Aircraft [1] role assignedAircraft
+    Pilot [1..*] role pilots
+end
+
+
+-- Links an aircraft to its associated transponder.
+association AircraftTransponder between
+    Aircraft [1] role aircraft
+    Transponder [1] role transponder
+end
+
+
+-- Links an aircraft to its associated TCAS system.
+association AircraftTCAS between
+    Aircraft [1] role aircraft
+    TCAS [0..1] role tcas
+end
+
+
+-- Links a TCAS to the intruder aircraft it tracks.
+association TCASIntruderAircraft between
+    TCAS [0..*] role tcas
+    IntruderAircraft [0..*] role intruderAircraft
+end
+
+-- Links a display to its traffic advisories.
+association DisplayTrafficAdvisory between
+    Display [1..*] role display
+    TrafficAdvisory [1..*] role trafficAdvisory
+end
+
+-- Links a display to its resolution advisories.
+association DisplayResolutionAdvisory between
+    Display [1..*] role display
+    ResolutionAdvisory [1..*] role resolutionAdvisory
+end
+
+-- Links traffic advisories to general advisories.
+association TrafficAdvisoryAdvisory between
+    TrafficAdvisory [0..0] role trafficAdvisory
+    Advisory [0..0] role advisory
+end
+
+-- Links resolution advisories to general advisories.
+association ResolutionAdvisoryAdvisory between
+    ResolutionAdvisory [0..0] role resolutionAdvisory
+    Advisory [0..0] role advisory
+end
+
+-- Links TCAS to its associated advisories.
+association TCASAdvisory between
+    Advisory [0..*] role advisory
+    TCAS [1] role tcas
+end
+
+-- Links an intruder aircraft to its transponder.
+association IntruderAircraftTransponder between
+    IntruderAircraft [0..*] role intruderaircraft
+    Transponder [1] role transponder
+end
+
+-- Links a TCAS system to its transponder.
+association TCASTransponder between
+    TCAS [1] role tcas
+    Transponder [1] role transponder
+end
+
+
+
+
+
+
+constraints
+
+-- Ensures aircraft altitude is non-negative.
+context Aircraft
+inv: currentAltitude >= 0
+
+
+-- Ensures aircraft distance is non-negative.
+context Aircraft
+inv: currentDistance >= 0
+
+
+-- Ensures autopilot implies TCAS system is present.
+context Aircraft
+inv: autoPilot = true implies tcas <> null
+
+
+-- Ensures every aircraft has a transponder.
+context Aircraft
+inv: transponder <> null
+
+
+-- Ensures every pilot has an assigned aircraft.
+context Pilot
+inv: assignedAircraft <> null
+
+
+-- Ensures intruder aircraft distance is positive.
+context IntruderAircraft
+inv: distanceFromOwnAircraft > 0
+
+
+-- Ensures intruder aircraft altitude is non-negative.
+context IntruderAircraft
+inv: altitude >= 0
+
+
+-- Ensures TCAS tracks aircraft within its max range.
+context TCAS
+inv: intruderAircraft->forAll(a | a.distanceFromOwnAircraft <= Max_range)
+
+
+-- Ensures advisory type is either Traffic or Resolution.
+context Advisory
+inv: advisoryType = 'Traffic' or advisoryType = 'Resolution'
+
+
+-- Ensures time-to-intruder is greater than 0.
+context Advisory
+inv: timeToIntruder > 0
+
+
+-- Ensures resolution advisory altitude change is positive.
+context ResolutionAdvisory
+inv: altitudeChange >= 0
+
+
+-- Ensures resolution advisory time matches the latest.
+context ResolutionAdvisory
+inv: timeToIntruder <= Advisory.allInstances()->collect(a | a.timeToIntruder)->max()
+
+
+-- Ensures all display IDs are unique.
+context Display
+inv: Display.allInstances()->isUnique(d | d.displayID)
+
+
+-- Ensures every display has a type.
+context Display
+inv: displayType <> ''
+
+
+-- Ensures traffic advisory links to an intruder aircraft.
+context TrafficAdvisory
+inv: intruderAircraft <> null
+
+
+
+-- Enables the autopilot if currently disabled.
+context Aircraft::autoPilot() : Boolean
+pre: autoPilot = false
+post: autoPilot = true and result = true
+
+
+-- Queries the transponder only if it is available.
+context Aircraft::queryTransponder() : Boolean
+pre: transponder <> null
+post: result = true
+
+
+-- Issues a traffic advisory if intruder is within range.
+context TCAS::issueTrafficAdvisory() : Boolean
+pre: intruderAircraft->exists(a | a.distanceFromOwnAircraft <= Max_range)
+post: result = true
+
+
+-- Transponder transmits data only if ID is set.
+context Transponder::transmitData() : Boolean
+pre: identificationCode <> ''
+post: result = true
+
+
+-- Displays resolution advisory if time to intruder is short.
+context ResolutionAdvisory::displayResolution() : Boolean
+pre: timeToIntruder <= 10
+post: Display.allInstances()->exists(d | d.displayContent = resolutionType and result = true)
+
+
+-- Displays traffic advisory if linked to an intruder aircraft.
+context TrafficAdvisory::displayAdvisory() : Boolean
+pre: intruderAircraft <> null
+post: Display.allInstances()->exists(d | d.displayContent <> '' and result = true)
+
+
+-- Pilot reacts to traffic advisory only with an assigned aircraft.
+context Pilot::reactToTrafficAdvisory() : Boolean
+pre: assignedAircraft <> null
+post: result = true
+
+
+-- Retrieves current altitude only if registration is set.
+context Aircraft::getCurrentAltitude() : Integer
+pre: registration <> ''
+post: result = currentAltitude
+
+
+-- Displays advisory content if advisory type is valid.
+context Advisory::displayAdvisory() : Boolean
+pre: advisoryType = 'Traffic' or advisoryType = 'Resolution'
+post: Display.allInstances()->exists(d | d.displayContent <> '' and result = true)
+
+
+-- Sets display content only if it is not empty.
+context Display::setDisplay() : Boolean
+pre: displayContent <> ''
+post: displayContent <> '' and result = true
+
+
+
+
+
